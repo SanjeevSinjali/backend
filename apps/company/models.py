@@ -10,8 +10,11 @@ class CompanyModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     employees = models.ManyToManyField(
-        "users.UserModel", related_name="companies", blank=True, null=True
+        "users.UserModel",
+        related_name="companies",
+        blank=True,
     )
+    location = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.company_name

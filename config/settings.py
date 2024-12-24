@@ -34,7 +34,7 @@ ALLOWED_HOSTS = ["127.0.0.1", "localhost", "localhost:5173"]
 # Application definition
 
 INSTALLED_APPS = [
-    "grappelli",
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -153,6 +153,13 @@ AUTHENTICATION_BACKENDS = [
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
+
+JAZZMIN_SETTINGS = {
+    "site_title": "JobsPro Admin",
+    "site_header": "JobsPro",
+    "site_brand": "JobsPro",
+    "site_logo": "/logo/logo.png",
 }

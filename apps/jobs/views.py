@@ -73,7 +73,8 @@ class JobViewSet(viewsets.ModelViewSet):
 
         seralizer = JobSerializer(jobs, many=True)
         return Response(seralizer.data)
-
+    
+    # /api/users/
     @action(detail=False, methods=["get"], url_path="search-job-count")
     def search_job_count(self, request, *args, **kwargs):
         jobs = JobModel.objects.all()
@@ -89,8 +90,6 @@ class JobViewSet(viewsets.ModelViewSet):
         ]
 
         return Response(response_data, status=status.HTTP_200_OK)
-
-    from django.http import JsonResponse
 
     @action(detail=False, methods=["get"], url_path="popular-job")
     def popular_jobs(self, request):
@@ -291,6 +290,8 @@ class JobViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="recommended-jobs")
     def recommendations(self, request):
+        
+        # logged in user ko detail 
         job_seeker = request.user
         user = UserModel.objects.get(pk=job_seeker.id)
         print(user.email, user.experience, user.skills)
@@ -299,7 +300,7 @@ class JobViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Insufficient profile data for recommendations."}, status=400
             )
-
+        # jobs filter hanxa  job haru chai user ko exp ra location bata
         filtered_jobs = JobModel.objects.filter(
             required_experience__lte=user.experience,
             location=user.address,
