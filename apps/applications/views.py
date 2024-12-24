@@ -1,5 +1,5 @@
 from rest_framework import viewsets
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import MultiPartParser, JSONParser
 from apps.jobs.models import JobModel
 from .models import ApplicationModel
 from .serializers import ApplicationSerializer
@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
-    parser_classes = [MultiPartParser]
+    parser_classes = [MultiPartParser, JSONParser]
     serializer_class = ApplicationSerializer
 
     def list(self, request, *args, **kwargs):
@@ -27,18 +27,18 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         data = request.data.copy()
         data["applicant"] = applicant.id
-
+        print("data : ", data)
         serializer = ApplicationSerializer(data=data)
 
         if serializer.is_valid():
+            print(serializer.validated_data)
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
     @action(detail=False, methods=["get"], url_path="jobs-with-applicants")
-    def get_jobs_with_applicants(self,request):
+    def get_jobs_with_applicants(self, request):
         jobs = JobModel.objects.prefetch_related("applications")
 
         response_data = []
@@ -56,11 +56,11 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                     "job_id": job.id,
                     "job_title": job.title,
                     "applicants": list(applicants),
-                    "applicants_count": len(list(applicants))
+                    "applicants_count": len(list(applicants)),
                 }
             )
 
-        return Response(response_data,status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
     def retrieve(self, request, *args, **kwargs):
         application = ApplicationModel.objects.get(pk=kwargs.get("pk"))
@@ -87,3 +87,10 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application = ApplicationModel.objects.get(pk=kwargs.get("pk"))
         application.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get"], url_path="me")
+    def get_my_applied_jobs(self, request):
+        user = request.user
+        applications = ApplicationModel.objects.filter(applicant=user)
+        serializer = ApplicationSerializer(applications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -7,7 +7,6 @@ from django.contrib.auth.models import (
 from django.utils.translation import gettext_lazy as _
 
 
-
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -33,29 +32,14 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 
-def cv_upload_path(instance, filename):
-    print(filename)
-    print(instance.email)
-    email_part = instance.email.split("@")[0]
-    return f"cv/cv_{email_part}.pdf"
+# def cv_upload_path(instance, filename):
+#     print(filename)
+#     print(instance.email)
+#     email_part = instance.email.split("@")[0]
+#     return f"cv/cv_{email_part}.pdf"
 
 
 class UserModel(AbstractBaseUser, PermissionsMixin):
-    JOB_ROLES = [
-        ("software_engineer", "Software Engineer"),
-        ("frontend_developer", "Frontend Developer"),
-        ("qa_engineer", "QA Engineer"),
-        ("back_end_developer", "Backend Developer"),
-        ("project_manager", "Project Manager"),
-        ("full_stack_developer", "Full Stack Developer"),
-        ("uiux_designer", "UI/UX Designer"),
-        ("graphics_designer", "Graphics Designer"),
-        ("laravel_developer", "Laravel Developer"),
-        ("digital_marketing", "Digital Marketing"),
-        ("php_developer", "PHP Developer"),
-        ("flutter_developer", "Flutter Developer"),
-    ]
-
     USER_ROLES = [
         ("admin", "admin"),
         ("seeker", "seeker"),
@@ -65,13 +49,12 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(_("email address"), unique=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    job_role = models.CharField(
-        max_length=100, choices=JOB_ROLES, blank=True, null=True
-    )
+    job_role = models.CharField(max_length=100, blank=True, null=True)
     user_role = models.CharField(max_length=100, choices=USER_ROLES, default="seeker")
     address = models.CharField(max_length=100)
     pincode = models.CharField(max_length=100)
-    cv = models.FileField(upload_to=cv_upload_path, default=None, null=True, blank=True)
+    skills = models.CharField(max_length=100, blank=True, null=True)
+    # cv = models.FileField(upload_to=cv_upload_path, default=None, null=True, blank=True)
     profile_image = models.ImageField(
         upload_to="profile_images", default=None, null=True, blank=True
     )
@@ -81,15 +64,10 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
         null=True,
         related_name="company_users",
     )
-
+    experience = models.IntegerField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
-    # liked_jobs = models.ManyToManyField(
-    #     "jobs.JobModel",
-    #     related_name="liked_jobs",
-    #     blank=True,
-    # )
 
     objects = CustomUserManager()
 
@@ -103,8 +81,19 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
-    def get_full_name(self):
-        return f"{self.first_name} {self.last_name}"
+    # def get_full_name(self):
+    #     return f"{self.first_name} {self.last_name}"
 
-    def get_short_name(self):
-        return self.first_name
+    # def get_short_name(self):
+    #     return self.first_name
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old_user = UserModel.objects.filter(pk=self.pk).first()
+            if old_user and old_user.password != self.password:
+                self.set_password(self.password)
+        else:
+            if self.password:
+                self.set_password(self.password)
+
+        super().save(*args, **kwargs)

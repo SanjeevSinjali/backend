@@ -8,6 +8,10 @@ from apps.users.models import UserModel
 from rest_framework.decorators import action
 from django.db import models
 from datetime import datetime, timedelta
+from django.db.models.functions import Lower, Upper
+from django.db.models import Count, F
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class JobViewSet(viewsets.ModelViewSet):
@@ -40,9 +44,9 @@ class JobViewSet(viewsets.ModelViewSet):
         if education_level:
             jobs = jobs.filter(education_level__icontains=education_level)
         if job_level:
-            jobs = jobs.filter(job_level=job_level)
+            jobs = jobs.filter(job_level_iexact=job_level)
         if shift:
-            jobs = jobs.filter(shift=shift)
+            jobs = jobs.filter(shift_iexact=shift)
         if title:
             jobs = jobs.filter(title__icontains=title)
 
@@ -74,13 +78,14 @@ class JobViewSet(viewsets.ModelViewSet):
     def search_job_count(self, request, *args, **kwargs):
         jobs = JobModel.objects.all()
         job_counts = (
-            jobs.values("title")
-            .annotate(count=models.Count("title"))
+            jobs.annotate(lower_title=Lower("title"))
+            .values("lower_title")
+            .annotate(count=Count("id"))
             .order_by("-count")
         )
 
         response_data = [
-            {"title": job["title"], "count": job["count"]} for job in job_counts
+            {"title": job["lower_title"], "count": job["count"]} for job in job_counts
         ]
 
         return Response(response_data, status=status.HTTP_200_OK)
@@ -98,7 +103,7 @@ class JobViewSet(viewsets.ModelViewSet):
         jobs_data = [
             {
                 "id": job.id,
-                "title": job.title,
+                "title": job.title.title(),
                 "liked_count": job.liked_count,
                 "company_name": job.company.company_name,
                 "company_logo": job.company.logo,
@@ -166,6 +171,38 @@ class JobViewSet(viewsets.ModelViewSet):
         serializer = JobSerializer(job)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="posted-jobs")
+    def get_job_posted_by_specific_user(self, request):
+        user = request.user
+        if user.user_role != "provider":
+            return Response(
+                {"error": "You are not authorized to view this data."},
+                status=403,
+            )
+
+        jobs = JobModel.objects.filter(posted_by=user)
+        if not jobs.exists():
+            return Response({"message": "No jobs posted by this user."}, status=404)
+
+        serializer = JobSerializer(jobs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="jobs-with-applicants")
+    def get_jobs_with_applicants(self, request):
+        user = request.user
+
+        # Ensure the user is a job provider
+        if user.user_role != "provider":
+            return Response(
+                {"error": "You are not authorized to view this data."},
+                status=403,
+            )
+
+        jobs = JobModel.objects.filter(posted_by=user)
+
+        serializer = JobSerializer(jobs, many=True)
+        return Response(serializer.data)
+
     def update(self, request, *args, **kwargs):
         job = JobModel.objects.get(pk=kwargs.get("pk"))
         serializer = JobSerializer(job, data=request.data)
@@ -186,3 +223,136 @@ class JobViewSet(viewsets.ModelViewSet):
         job = JobModel.objects.get(pk=kwargs.get("pk"))
         job.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # @action(detail=False, methods=["get"], url_path="recommended-jobs")
+    # def recommendations(self,request):
+    #     job_seeker = request.user
+    #     print(job_seeker)
+
+    #     filtered_jobs = JobModel.objects.filter(
+    #         required_experience__lte=job_seeker.experience,
+    #         location=job_seeker.address,
+    #     )
+
+    #     vectorizer = TfidfVectorizer(stop_words="english")
+
+    #     job_seeker_skills = job_seeker.skills.lower()
+    #     job_skills = [JobModel.skills_required.lower() for job in filtered_jobs]
+
+    #     tfidf_matrix = vectorizer.fit_transform([job_seeker_skills] + job_skills)
+    #     similarity_scores = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
+
+    #     job_scores = list(zip(filtered_jobs, similarity_scores[0]))
+    #     job_scores.sort(key=lambda x: x[1], reverse=True)
+
+    #     recommended_jobs = [job for job, score in job_scores]
+
+    #     serializer = JobSerializer(recommended_jobs, many=True)
+    #     print(serializer.data)
+    #     return Response(serializer.data)
+
+    # @action(detail=False, methods=["get"], url_path="recommended-jobs")
+    # def recommendations(self, request):
+    #     job_seeker = request.user
+    #     user = UserModel.objects.get(pk=job_seeker.id)
+    #     print(user.email, user.experience, user.skills)
+    #     if not user.experience or not user.skills:
+    #         return Response(
+    #             {"error": "Insufficient profile data for recommendations."}, status=400
+    #         )
+
+    #     filtered_jobs = JobModel.objects.filter(
+    #         required_experience__lte=user.experience,
+    #         location=user.address,
+    #     )
+
+    #     if not filtered_jobs.exists():
+    #         return Response({"message": "No matching jobs found."}, status=404)
+
+    #     vectorizer = TfidfVectorizer(stop_words="english")
+
+    #     job_seeker_skills = user.skills.lower()
+    #     job_skills = [
+    #         job.skills_required.lower() if job.skills_required else ""
+    #         for job in filtered_jobs
+    #     ]
+
+    #     print(job_skills)
+    #     tfidf_matrix = vectorizer.fit_transform([job_seeker_skills] + job_skills)
+    #     similarity_scores = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
+
+    #     job_scores = list(zip(filtered_jobs, similarity_scores[0]))
+    #     job_scores.sort(key=lambda x: x[1], reverse=True)
+
+    #     recommended_jobs = [job for job, score in job_scores]
+
+    #     serializer = self.get_serializer(recommended_jobs, many=True)
+    #     return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="recommended-jobs")
+    def recommendations(self, request):
+        job_seeker = request.user
+        user = UserModel.objects.get(pk=job_seeker.id)
+        print(user.email, user.experience, user.skills)
+
+        if not user.experience or not user.skills:
+            return Response(
+                {"error": "Insufficient profile data for recommendations."}, status=400
+            )
+
+        filtered_jobs = JobModel.objects.filter(
+            required_experience__lte=user.experience,
+            location=user.address,
+        )
+
+        if not filtered_jobs.exists():
+            return Response({"message": "No matching jobs found."}, status=404)
+
+        vectorizer = TfidfVectorizer(stop_words="english")
+
+        job_seeker_skills = user.skills.lower()
+        job_skills = [
+            job.skills_required.lower() if job.skills_required else ""
+            for job in filtered_jobs
+        ]
+
+        tfidf_matrix = vectorizer.fit_transform([job_seeker_skills] + job_skills)
+        similarity_scores = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
+
+        job_scores = list(zip(filtered_jobs, similarity_scores[0]))
+
+        job_scores.sort(key=lambda x: x[1], reverse=True)
+
+        recommended_jobs = [job for job, score in job_scores[:12]]
+
+        serializer = self.get_serializer(recommended_jobs, many=True)
+        return Response(serializer.data)
+
+    # @action(detail=False, methods=["get"], url_path="liked-jobs-by-user")
+    # def get_liked_jobs_by_user(self, request):
+    #     user = request.user
+    #     liked_jobs = JobsLikedModel.objects.filter(user=user)
+    #     serializer = JobSerializer(liked_jobs, many=True)
+    #     return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="liked-job-status")
+    def liked_job_status(self, request):
+        job_id = request.query_params.get("job_id")
+        user = request.user
+
+        if not job_id:
+            return Response(
+                {"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            job = JobModel.objects.get(id=job_id)
+        except JobModel.DoesNotExist:
+            return Response(
+                {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if the user has liked the job
+        liked = JobsLikedModel.objects.filter(user=user, job=job).exists()
+
+        return Response({"liked": liked})

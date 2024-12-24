@@ -36,7 +36,7 @@ class JobModel(models.Model):
     location = models.CharField(max_length=200)
     job_type = models.CharField(max_length=20, choices=JOB_TYPES)
     salary = models.CharField(max_length=100, null=True, blank=True)
-    required_experience = models.CharField(max_length=50, null=True, blank=True)
+    required_experience = models.IntegerField(null=True, blank=True)
     skills_required = models.TextField(null=True, blank=True)
     education_level = models.CharField(max_length=100, null=True, blank=True)
     job_level = models.CharField(
